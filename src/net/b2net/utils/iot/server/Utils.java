@@ -72,7 +72,7 @@ public class Utils
             };
 
 
-    public static final String MC_ROOT_KEY = "T8N5A0EY10X4S786";
+    public static final String MC_ROOT_KEY = "A98BH0AZ23J82QT2";
 
     // 30 minutes
     public static final long NOTIFICATION_TIMEOUT = 30 * 60 * 1000;
