@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IoTConfiguration xsi:noNamespaceSchemaLocation="IoTConfiguration.xsd"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Server Port="5409" IP="0.0.0.0"/>
+    <JsonServer Port="5408" IP="0.0.0.0"/>
+	 <DatabaseProvider Instance="net.b2net.utils.iot.server.storage.DatabaseProviderMEM" Args="./backup 600000"/>
+</IoTConfiguration>
