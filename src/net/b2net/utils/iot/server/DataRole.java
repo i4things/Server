@@ -90,6 +90,48 @@ public class DataRole
         }
     }
 
+    public boolean matchNodeAccount(UUID id,
+                                    long nodeId)
+    {
+        lock.readLock().lock();
+        try
+        {
+
+            NodeData n = store.allNodes.get(nodeId);
+            if (n == null)
+            {
+                return false;
+            }
+
+
+            return n.getAccountId().equals(id);
+        }
+        finally
+        {
+            lock.readLock().unlock();
+        }
+    }
+
+    public boolean matchGatewayAccount(UUID id,
+                                       long gatewayId)
+    {
+        lock.readLock().lock();
+        try
+        {
+            GatewayData g = store.allGateways.get(gatewayId);
+            if (g == null)
+            {
+                return false;
+            }
+
+            return g.getAccountId().equals(id);
+        }
+        finally
+        {
+            lock.readLock().unlock();
+        }
+    }
+
     public boolean matchGatewayNode(long gatewayId,
                                     long nodeId)
     {

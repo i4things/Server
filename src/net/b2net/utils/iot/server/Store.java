@@ -1536,6 +1536,12 @@ class Store
             }
             String str_id = crc_id.substring(4);
 
+            //check node ownership
+            if (!databaseProvider.getDataRole().matchNodeAccount(accountId,Long.parseLong(str_id)))
+            {
+                return "WRNG5[OWNERSHIP]";
+            }
+
             ArrayList<String> labels = new ArrayList<String>();
             ArrayList<String> rssis = new ArrayList<String>();
             ArrayList<String> lats = new ArrayList<String>();
@@ -1718,6 +1724,11 @@ class Store
                 return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
+            //check gateway ownership
+            if (!databaseProvider.getDataRole().matchGatewayAccount(accountId,Long.parseLong(str_id)))
+            {
+                return "WRNG5[OWNERSHIP]";
+            }
 
             ArrayList<String> labels = new ArrayList<String>();
             ArrayList<String> histLabels = new ArrayList<String>();
