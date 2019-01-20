@@ -8,6 +8,7 @@ import net.b2net.utils.iot.nio.handlers.PacketChannel;
 import net.b2net.utils.iot.nio.handlers.PacketChannelListener;
 import net.b2net.utils.iot.nio.io.SelectorThread;
 
+
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -56,60 +57,8 @@ class JsonServer implements AcceptorListener, PacketChannelListener
 
     private final DoSPreventer preventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
 
-
-    Thread workerThread = new Thread(new Runnable()
-    {
-        @Override
-        public void run()
-        {
-            try
-            {
-                acceptor.openServerSocket();
-            }
-            catch (Exception ex)
-            {
-                Print.printStackTrace(ex, logger);
-                System.exit(1);
-            }
-
-            logger.info("Json socket server started");
-
-            Collection<Runnable> drainCollection = new ArrayList<Runnable>(maxDrainSizeServerProcessing);
-
-            for (; ; )
-            {
-                drainCollection.clear();
-
-                try
-                {
-                    int drainedElements = workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing);
-                    if (drainedElements == 0)
-                    {
-                        drainCollection.add(workerQueueServerProcessing.take());
-                        workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing - 1);
-                    }
-
-                    for (Runnable runnable : drainCollection)
-                    {
-                        try
-                        {
-                            runnable.run();
-                        }
-                        catch (Exception ex)
-                        {
-                            Print.printStackTrace(ex, logger);
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    Print.printStackTrace(e, logger);
-                }
-            }
-
-        }
-    }, "JsonServer.WorkThread");
-
+    private final int THREAD_POOL_SIZE = 16;
+    private final Thread[] pool = new Thread[THREAD_POOL_SIZE];
 
     JsonServer(String address,
                int port,
@@ -118,6 +67,48 @@ class JsonServer implements AcceptorListener, PacketChannelListener
         this.address = address;
         this.port = port;
         this.processor = new JsonProcessor(store);
+
+        for (int i = 0; i < THREAD_POOL_SIZE; i++)
+        {
+            pool[i] = new Thread(new Runnable()
+            {
+                public void run()
+                {
+                    Collection<Runnable> drainCollection = new ArrayList<Runnable>(maxDrainSizeServerProcessing);
+                    for (; ; )
+                    {
+                        drainCollection.clear();
+
+                        try
+                        {
+                            int drainedElements = workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing);
+                            if (drainedElements == 0)
+                            {
+                                drainCollection.add(workerQueueServerProcessing.take());
+                                workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing - 1);
+                            }
+
+                            for (Runnable runnable : drainCollection)
+                            {
+                                try
+                                {
+                                    runnable.run();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Print.printStackTrace(ex, logger);
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Print.printStackTrace(e, logger);
+                        }
+
+                    }
+                }
+            }, "Json Server Thread: " + i);
+        }
     }
 
     /**
@@ -127,7 +118,7 @@ class JsonServer implements AcceptorListener, PacketChannelListener
     {
         try
         {
-            logger.info("Initializing json socket server on port: " + this.port);
+            logger.info("Initializing json server on port: " + this.port);
 
             this.st = new SelectorThread("JsonServer.SelectorThread");
             this.acceptor = new Acceptor(address, port, st, this);
@@ -142,8 +133,24 @@ class JsonServer implements AcceptorListener, PacketChannelListener
 
     void start()
     {
-        workerThread.setDaemon(true);
-        workerThread.start();
+        try
+        {
+            acceptor.openServerSocket();
+        }
+        catch (Exception ex)
+        {
+            Print.printStackTrace(ex, logger);
+            System.exit(1);
+        }
+
+        logger.info("Json server started");
+
+        // start all pool treads
+        for (int i = 0; i < THREAD_POOL_SIZE; i++)
+        {
+            pool[i].setDaemon(true);
+            pool[i].start();
+        }
     }
 
     /**

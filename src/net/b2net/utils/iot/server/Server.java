@@ -8,6 +8,7 @@ import net.b2net.utils.iot.nio.handlers.PacketChannel;
 import net.b2net.utils.iot.nio.handlers.PacketChannelListener;
 import net.b2net.utils.iot.nio.io.SelectorThread;
 
+
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
@@ -50,6 +51,9 @@ class Server implements AcceptorListener, PacketChannelListener
 
     private final DoSPreventer preventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
 
+    private final int THREAD_POOL_SIZE = 16;
+    private final Thread[] pool = new Thread[THREAD_POOL_SIZE -1];
+
     Server(String address,
            int port,
            Store store)
@@ -57,18 +61,60 @@ class Server implements AcceptorListener, PacketChannelListener
         this.address = address;
         this.port = port;
         this.processor = new Processor(store);
+
+        for (int i = 0; i < (THREAD_POOL_SIZE -1); i++)
+        {
+            pool[i] = new Thread(new Runnable()
+            {
+                public void run()
+                {
+                    Collection<Runnable> drainCollection = new ArrayList<Runnable>(maxDrainSizeServerProcessing);
+                    for (; ; )
+                    {
+                        drainCollection.clear();
+
+                        try
+                        {
+                            int drainedElements = workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing);
+                            if (drainedElements == 0)
+                            {
+                                drainCollection.add(workerQueueServerProcessing.take());
+                                workerQueueServerProcessing.drainTo(drainCollection, maxDrainSizeServerProcessing - 1);
+                            }
+
+                            for (Runnable runnable : drainCollection)
+                            {
+                                try
+                                {
+                                    runnable.run();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Print.printStackTrace(ex, logger);
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Print.printStackTrace(e, logger);
+                        }
+
+                    }
+                }
+            }, "Socket Server Thread: " + i);
+        }
     }
 
     /**
-     * Initializes the iot server
+     * Initializes the socket server
      */
     void initialize()
     {
         try
         {
-            logger.info("Initializing IoT socket server on port: " + this.port);
+            logger.info("Initializing socket server on port: " + this.port);
 
-            this.st = new SelectorThread("IoTServer.SelectorThread");
+            this.st = new SelectorThread("SocketServer.SelectorThread");
             this.acceptor = new Acceptor(address, port, st, this);
         }
         catch (Exception ex)
@@ -80,7 +126,7 @@ class Server implements AcceptorListener, PacketChannelListener
 
 
     /**
-     * Starts the web socket server
+     * Starts the socket server
      */
     void run()
     {
@@ -94,8 +140,16 @@ class Server implements AcceptorListener, PacketChannelListener
             System.exit(1);
         }
 
-        logger.info("IoT socket server started");
+        logger.info("Socket server started");
 
+        // start all pool treads
+        for (int i = 0; i < (THREAD_POOL_SIZE -1); i++)
+        {
+            pool[i].setDaemon(true);
+            pool[i].start();
+        }
+
+        // start last one
         Collection<Runnable> drainCollection = new ArrayList<Runnable>(maxDrainSizeServerProcessing);
 
         for (; ; )
