@@ -17,6 +17,34 @@ final class DeleteList
 {
     private DeleteListElement first = null;
     private DeleteListElement last = null;
+    private int lastBufferSize = 0;
+    private int lastMessageCount = 0;
+
+    void incLastBufferSize(int size)
+    {
+        lastBufferSize += size;
+    }
+
+    void incLastMessageCount()
+    {
+        lastMessageCount++;
+    }
+
+    void clearLast()
+    {
+        lastBufferSize = 0;
+        lastMessageCount = 0;
+    }
+
+    int getLastBufferSize()
+    {
+        return lastBufferSize;
+    }
+
+    int getLastMessageCount()
+    {
+        return lastMessageCount;
+    }
 
     void push(DeleteListElement element)
     {

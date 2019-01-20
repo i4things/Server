@@ -280,6 +280,7 @@ class Server implements AcceptorListener, PacketChannelListener
                 @Override
                 public void run()
                 {
+                    processor.disconnect(pc);
                     logger.fine("Client goes away: " + pc.getRemoteAddress());
                 }
             });

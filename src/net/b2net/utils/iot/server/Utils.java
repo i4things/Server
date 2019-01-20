@@ -1,7 +1,6 @@
 package net.b2net.utils.iot.server;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.text.DecimalFormat;
 import java.util.logging.Logger;
 

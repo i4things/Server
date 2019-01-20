@@ -33,7 +33,7 @@ public class Startup implements Runnable
 {
     private static final Logger logger = Logger.getLogger(Processor.class.getCanonicalName());
 
-    private String[] ags;
+    private String[] args;
 
     public static void main(String[] args)
     {

@@ -1,6 +1,7 @@
 package net.b2net.utils.iot.server;
 
 import net.b2net.utils.iot.common.logger.Print;
+import net.b2net.utils.iot.nio.handlers.PacketChannel;
 import net.b2net.utils.iot.server.storage.DatabaseProvider;
 
 import java.nio.ByteBuffer;
@@ -91,17 +92,7 @@ class Store
         ret.put((byte) 4);
         ret.putInt((int) (System.currentTimeMillis() & 0xFFFFFFFFL));
 
-        for (int i = 0; (i < Utils.MAX_MSG_HEARTBEAT) && (ret.position() < (Utils.MAX_BUFFER_SIZE_HEARTBEAT - Utils.MAX_NOTIFY_SIZE)); i++)
-        {
-            ByteBuffer b = gatewayBuffer.get(site_id);
-            if (b == null)
-            {
-                break;
-            }
-
-            ret.put((byte) b.remaining());
-            ret.put(b);
-        }
+        gatewayBuffer.get(ret, site_id);
 
         ret.flip();
 
@@ -695,21 +686,33 @@ class Store
 
                 if (gateway_id != -1)
                 {
-                    // make a ready to be sent packet - only seq and crc need to be set
-                    ByteBuffer to_gateway = ByteBuffer.allocate(data_arr.length + 1 + 1 + 8 + 8);
-                    to_gateway.order(Processor.ORDER);
-                    to_gateway.put((byte) 0); // CRC
-                    to_gateway.put((byte) 0); // SEQ
-                    Utils.putOTS(to_gateway, device_id); // destination id
-                    Utils.putOTS(to_gateway, gateway_id); // source id
-                    to_gateway.put(data_arr);
+                    // make sure the message is not empty which will guaranty that the message size will be > 5 ( length = 4)
+                    // and will not be treated as a sycn
+                    if ((data_arr != null) && (data_arr.length > 0))
+                    {
+                        // make a ready to be sent packet - only seq and crc need to be set
+                        byte[] buf = new byte[data_arr.length + 1 + 1 + 1 + 8 + 8];
+                        ByteBuffer to_gateway = ByteBuffer.wrap(buf);
+                        to_gateway.order(Processor.ORDER);
+                        to_gateway.put((byte) 0); // SIZE
+                        to_gateway.put((byte) 0); // CRC
+                        to_gateway.put((byte) 0); // SEQ
+                        Utils.putOTS(to_gateway, device_id); // destination id
+                        Utils.putOTS(to_gateway, gateway_id); // source id
+                        to_gateway.put(data_arr);
 
-                    // reset for reading
-                    to_gateway.flip();
+                        // reset for reading
+                        to_gateway.flip();
+                        // set size directly in the underline array - exclude the size byte
+                        buf[0] = (byte) (to_gateway.remaining() - 1);
 
-                    gatewayBuffer.add(gateway_id, to_gateway);
+                        gatewayBuffer.add(gateway_id, to_gateway);
 
-                    return "iot_json = '{ \"RES\" : \"OK\" }';";
+                        return "var iot_json = '{ \"RES\" : \"OK\" }';";
+                    }
+
+                    return "var iot_json = '{ \"ERR\" : \"message empty\" }';";
+
                 }
 
             }
@@ -1537,7 +1540,7 @@ class Store
             String str_id = crc_id.substring(4);
 
             //check node ownership
-            if (!databaseProvider.getDataRole().matchNodeAccount(accountId,Long.parseLong(str_id)))
+            if (!databaseProvider.getDataRole().matchNodeAccount(accountId, Long.parseLong(str_id)))
             {
                 return "WRNG5[OWNERSHIP]";
             }
@@ -1725,7 +1728,7 @@ class Store
             }
             String str_id = crc_id.substring(4);
             //check gateway ownership
-            if (!databaseProvider.getDataRole().matchGatewayAccount(accountId,Long.parseLong(str_id)))
+            if (!databaseProvider.getDataRole().matchGatewayAccount(accountId, Long.parseLong(str_id)))
             {
                 return "WRNG5[OWNERSHIP]";
             }
@@ -1877,6 +1880,16 @@ class Store
             Print.printStackTrace(th, logger);
             return "WRNG7[" + th.getMessage() + "]";
         }
+    }
+
+    void disconnect(PacketChannel pc)
+    {
+        gatewayBuffer.removeGatewayChannel(pc);
+    }
+
+    void connect(long gateway_id, PacketChannel pc)
+    {
+        gatewayBuffer.addGatewayChannel(gateway_id, pc);
     }
 }
 

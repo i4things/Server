@@ -1,5 +1,7 @@
 package net.b2net.utils.iot.server;
 
+import net.b2net.utils.iot.nio.handlers.PacketChannel;
+
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,6 +28,9 @@ class GatewayBuffer
     private Map<Long, DeleteList> data = new HashMap<Long, DeleteList>();
     private final Object sync = new Object();
     private final BlockingQueue<TimeoutElement> timeouted = new DelayQueue<TimeoutElement>();
+    private final Map<Long, PacketChannel> gatewayCh = new HashMap<Long, PacketChannel>();
+    private final Map<PacketChannel, Long> channelGw = new HashMap<PacketChannel, Long>();
+
 
     private class TimeoutElement implements Delayed
     {
@@ -99,6 +104,27 @@ class GatewayBuffer
         cleanupThread.start();
     }
 
+    void addGatewayChannel(long gateway_id, PacketChannel pc)
+    {
+        synchronized (sync)
+        {
+            gatewayCh.put(new Long(gateway_id), pc);
+            channelGw.put(pc, new Long(gateway_id));
+        }
+    }
+
+    void removeGatewayChannel(PacketChannel pc)
+    {
+        synchronized (sync)
+        {
+            Long gateway_id = channelGw.remove(pc);
+            if (gateway_id != null)
+            {
+                gatewayCh.remove(gateway_id);
+            }
+        }
+    }
+
     void add(long gateway_id, ByteBuffer value)
     {
         DeleteListElement e = new DeleteListElement(value);
@@ -112,6 +138,24 @@ class GatewayBuffer
                 data.put(new Long(gateway_id), l);
             }
             l.push(e);
+
+            // if space is available and channel known push one message
+            if ((l.getLastMessageCount() < Utils.MAX_MSG_HEARTBEAT) && (l.getLastBufferSize() < (Utils.MAX_BUFFER_SIZE_HEARTBEAT - Utils.MAX_NOTIFY_SIZE)))
+            {
+                PacketChannel pc = gatewayCh.get(new Long(gateway_id));
+                if (pc != null)
+                {
+                    e = l.pop();
+
+                    if (e != null)
+                    {
+                        l.incLastMessageCount();
+                        l.incLastBufferSize(e.getValue().remaining());
+
+                        pc.sendPacket(e.getValue());
+                    }
+                }
+            }
         }
 
         try
@@ -124,27 +168,40 @@ class GatewayBuffer
         }
     }
 
-    ByteBuffer get(long gateway_id)
+    void get(ByteBuffer buffer, long gateway_id)
     {
-        DeleteListElement e = null;
-
+        DeleteList l = null;
         synchronized (sync)
         {
-            DeleteList l = data.get(new Long(gateway_id));
-            if (l == null)
+            l = data.get(new Long(gateway_id));
+        }
+
+        if (l == null)
+        {
+            return;
+        }
+
+        l.clearLast();
+
+        for (int i = 0; (i < Utils.MAX_MSG_HEARTBEAT) && (buffer.position() < (Utils.MAX_BUFFER_SIZE_HEARTBEAT - Utils.MAX_NOTIFY_SIZE)); i++)
+        {
+            DeleteListElement e = null;
+
+            synchronized (sync)
             {
-                return null;
+                e = l.pop();
+
+                if (e == null)
+                {
+                    break;
+                }
+
+                l.incLastMessageCount();
+                l.incLastBufferSize(e.getValue().remaining());
             }
 
-            e = l.pop();
+            buffer.put(e.getValue());
         }
-
-        if (e == null)
-        {
-            return null;
-        }
-
-        return e.getValue();
 
     }
 

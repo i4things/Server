@@ -50,6 +50,11 @@ public class Processor
         pc.sendPacket(b);
     }
 
+    void disconnect(PacketChannel pc)
+    {
+        store.disconnect(pc);
+    }
+
     boolean process(ByteBuffer in, PacketChannel pc)
     {
         in.order(Processor.ORDER);
@@ -81,6 +86,8 @@ public class Processor
             ByteBuffer res = store.heartbeat(site_id, data);
 
             pc.sendPacket(res);
+
+            store.connect(site_id, pc);
 
         }
         else if (type == 128)
