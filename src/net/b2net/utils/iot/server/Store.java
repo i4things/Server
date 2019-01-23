@@ -392,17 +392,15 @@ class Store
         }
     }
 
-    String get_iot_get(final long device_id, final String challenge)
+    String get_iot_get(final long device_id, final String challenge, final boolean top)
     {
         //check challenge
 
         byte[] network_key = databaseProvider.getDataRole().getNodeNetworkKey(device_id);
         if (network_key == null)
         {
-
             logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
             return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
-
         }
 
         byte[] challenge_arr = Utils.fromHex(challenge);
@@ -456,7 +454,10 @@ class Store
                 long last_updated = 0;
                 int last_seq = 0;
 
-                for (int i = 0; i < storeTuple.getLast().get().size(); i++)
+                // user together with top to exit te loop
+                boolean get_out = false;
+
+                for (int i = 0; (i < storeTuple.getLast().get().size()) && (!get_out); i++)
                 {
                     StoreElement l = storeTuple.getLast().get().get(i);
 
@@ -535,6 +536,13 @@ class Store
                         }
                         sb.append("] },");
 
+
+                        if (top)
+                        {
+                            // we need only the top element;
+                            get_out = true;
+                            break;
+                        }
 
                         if ((i == (storeTuple.getLast().get().size() - 1)) && (!last_eq))
                         {

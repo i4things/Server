@@ -102,7 +102,35 @@ class JsonProcessor
                         // not interested
                     }
 
-                    return store.get_iot_get(device_id, token[1]);
+                    return store.get_iot_get(device_id, token[1], false);
+                }
+            }                    //01234567890123
+            else if (r.startsWith("/iot_get_last/"))
+            {   // IoT device data for the day
+                r = r.substring(14);
+                for (int i = 0; i < r.length(); i++)
+                {
+                    if (r.charAt(i) == ' ')
+                    {
+                        r = r.substring(0, i);
+                        break;
+                    }
+                }
+
+                String[] token = r.split("-");
+                if (token.length > 1)
+                {
+                    long device_id = 0;
+                    try
+                    {
+                        device_id = Long.parseLong(token[0]);
+                    }
+                    catch (Exception e)
+                    {
+                        // not interested
+                    }
+
+                    return store.get_iot_get(device_id, token[1], true);
                 }
             }                      //012345678
             else if (r.startsWith("/iot_set/"))
