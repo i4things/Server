@@ -392,49 +392,8 @@ class Store
         }
     }
 
-    String get_iot_get(final long device_id, final String challenge, final boolean top)
+    String extract_data(final long device_id, final boolean top, final long from)
     {
-        //check challenge
-
-        byte[] network_key = databaseProvider.getDataRole().getNodeNetworkKey(device_id);
-        if (network_key == null)
-        {
-            logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
-            return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
-        }
-
-        byte[] challenge_arr = Utils.fromHex(challenge);
-        if (challenge_arr == null)
-        {
-            return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
-        }
-
-        ByteBuffer crc_data = ByteBuffer.wrap(XXTEABin.xxteaDecrypt(challenge_arr, network_key));
-        crc_data.order(Processor.ORDER);
-        long crc = crc_data.getInt() & 0xFFFFFFFFL;
-        int timestamp_pos = crc_data.position();
-        byte[] timestamp_arr = new byte[crc_data.remaining()];
-        crc_data.get(timestamp_arr);
-
-        if (crc != XXTEACRCBin.crc4(timestamp_arr))
-        {
-            // not our protocol
-            logger.severe("Protocol mismatch : sign invalid.");
-            return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
-        }
-
-        crc_data.position(timestamp_pos);
-        long timestamp_utc = crc_data.getLong();
-
-        if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
-        {
-            // not our protocol
-            logger.severe("Protocol mismatch : challenge timeout.");
-            return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
-        }
-
-        // all good and valid continue
-
         StringBuilder sb = new StringBuilder();
 
         lock.readLock().lock();
@@ -461,6 +420,8 @@ class Store
                 {
                     StoreElement l = storeTuple.getLast().get().get(i);
 
+
+                    // process the element
                     if (last_updated == 0)
                     {
                         last_updated = l.getTimestamp();
@@ -487,6 +448,7 @@ class Store
                         last_eq = true;
                     }
 
+
                     for (; ; )
                     {
                         byte[] data = getDataFromGroup_iot(eq_data);
@@ -497,6 +459,13 @@ class Store
                         eq_data.add(l);
                         last_seq = seq;
 
+                        // check if not wanted by timestamp
+                        if (timestamp <= from)
+                        {
+                            // too old and all next are old also - do not process and get out
+                            get_out = true;
+                            break;
+                        }
 
                         sb.append("{");
                         sb.append("\"t\": ").append(timestamp).append(", ");
@@ -577,6 +546,52 @@ class Store
         {
             lock.readLock().unlock();
         }
+    }
+
+    String get_iot_get(final long device_id, final String challenge, final boolean top, final long from)
+    {
+        //check challenge
+
+        byte[] network_key = databaseProvider.getDataRole().getNodeNetworkKey(device_id);
+        if (network_key == null)
+        {
+            logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
+            return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
+        }
+
+        byte[] challenge_arr = Utils.fromHex(challenge);
+        if (challenge_arr == null)
+        {
+            return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
+        }
+
+        ByteBuffer crc_data = ByteBuffer.wrap(XXTEABin.xxteaDecrypt(challenge_arr, network_key));
+        crc_data.order(Processor.ORDER);
+        long crc = crc_data.getInt() & 0xFFFFFFFFL;
+        int timestamp_pos = crc_data.position();
+        byte[] timestamp_arr = new byte[crc_data.remaining()];
+        crc_data.get(timestamp_arr);
+
+        if (crc != XXTEACRCBin.crc4(timestamp_arr))
+        {
+            // not our protocol
+            logger.severe("Protocol mismatch : sign invalid.");
+            return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
+        }
+
+        crc_data.position(timestamp_pos);
+        long timestamp_utc = crc_data.getLong();
+
+        if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
+        {
+            // not our protocol
+            logger.severe("Protocol mismatch : challenge timeout.");
+            return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
+        }
+
+        // all good and valid continue
+
+        return extract_data(device_id, top, from);
     }
 
 

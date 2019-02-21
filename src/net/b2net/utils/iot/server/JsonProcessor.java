@@ -102,7 +102,7 @@ class JsonProcessor
                         // not interested
                     }
 
-                    return store.get_iot_get(device_id, token[1], false);
+                    return store.get_iot_get(device_id, token[1], false, 0);
                 }
             }                    //01234567890123
             else if (r.startsWith("/iot_get_last/"))
@@ -130,7 +130,46 @@ class JsonProcessor
                         // not interested
                     }
 
-                    return store.get_iot_get(device_id, token[1], true);
+                    return store.get_iot_get(device_id, token[1], true, 0);
+                }
+            }                    //01234567890123
+            else if (r.startsWith("/iot_get_from/"))
+            {   // IoT device data for the day
+                r = r.substring(14);
+                for (int i = 0; i < r.length(); i++)
+                {
+                    if (r.charAt(i) == ' ')
+                    {
+                        r = r.substring(0, i);
+                        break;
+                    }
+                }
+
+                String[] token = r.split("-");
+                if (token.length > 2)
+                {
+                    long device_id = 0;
+                    long from = 0;
+
+                    try
+                    {
+                        device_id = Long.parseLong(token[0]);
+                    }
+                    catch (Exception e)
+                    {
+                        // not interested
+                    }
+
+                    try
+                    {
+                        from = Integer.parseInt(token[1]);
+                    }
+                    catch (Exception e)
+                    {
+                        // not interested
+                    }
+
+                    return store.get_iot_get(device_id, token[2], false, from);
                 }
             }                      //012345678
             else if (r.startsWith("/iot_set/"))
