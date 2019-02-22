@@ -34,6 +34,25 @@ public class DataRole
         this.lock = lock;
     }
 
+    public final UUID getAccount(long nodeId)
+    {
+        lock.readLock().lock();
+        try
+        {
+            NodeData n = store.allNodes.get(nodeId);
+            if (n == null)
+            {
+                return null;
+            }
+
+            return n.getAccountId();
+        }
+        finally
+        {
+            lock.readLock().unlock();
+        }
+    }
+
     public final StoreDataRole getStore()
     {
         return store;

@@ -1,5 +1,7 @@
 package net.b2net.utils.iot.server;
 
+import java.util.UUID;
+
 /**
  * USE OF THIS SOFTWARE IS GOVERNED BY THE TERMS AND CONDITIONS
  * OF THE LICENSE STATEMENT AND LIMITED WARRANTY FURNISHED WITH
@@ -22,7 +24,7 @@ public interface StreamingProvider
 
     // data for the specific id is received  ( data is in js/JSON format )
     // need to be thread safe as can be called from different threads
-    public void dataReceived(long id, String data);
+    public void dataReceived(long id, UUID accountId, String data);
 
     // init arguments
     public void initialize(String[] args);

@@ -146,7 +146,7 @@ class Store
             {
                 if ( streamingProvider.isSubscribed(device_id.longValue()))
                 {
-                    streamingProvider.dataReceived(device_id.longValue(),extract_data(device_id.longValue(), true, 0));
+                    streamingProvider.dataReceived(device_id.longValue(), databaseProvider.getDataRole().getAccount(device_id.longValue()),extract_data(device_id.longValue(), true, 0));
                 }
             }
 
