@@ -94,7 +94,7 @@ public class Startup implements Runnable
                     String[] streamingProviderInstanceArgs = new String[0];
                     if ((streamingProviderInstanceArgsString != null) && (!streamingProviderInstanceArgsString.isEmpty()))
                     {
-                        streamingProviderInstanceArgs = databaseProviderInstanceArgsString.split("\\ ");
+                        streamingProviderInstanceArgs = streamingProviderInstanceArgsString.split("\\ ");
                     }
                     Class cls = Class.forName(StreamingProviderInstanceName.trim());
                     Constructor ctors = cls.getConstructor();
