@@ -71,6 +71,7 @@ public class Startup implements Runnable
         }
 
         DatabaseProvider databaseProvider = null;
+        StreamingProvider streamingProvider = null;
         ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
         try
@@ -84,6 +85,25 @@ public class Startup implements Runnable
 
             databaseProvider.initialize(lock, databaseProviderInstanceArgs);
 
+            if (configuration.getStreamingProvider() != null)
+            {
+                String StreamingProviderInstanceName = configuration.getStreamingProvider().getInstance();
+                if ((StreamingProviderInstanceName != null) && (!StreamingProviderInstanceName.isEmpty()))
+                {
+                    String streamingProviderInstanceArgsString = configuration.getStreamingProvider().getArgs();
+                    String[] streamingProviderInstanceArgs = new String[0];
+                    if ((streamingProviderInstanceArgsString != null) && (!streamingProviderInstanceArgsString.isEmpty()))
+                    {
+                        streamingProviderInstanceArgs = databaseProviderInstanceArgsString.split("\\ ");
+                    }
+                    Class cls = Class.forName(StreamingProviderInstanceName.trim());
+                    Constructor ctors = cls.getConstructor();
+                    streamingProvider = (StreamingProvider) ctors.newInstance();
+
+                    streamingProvider.initialize(streamingProviderInstanceArgs);
+                }
+            }
+
         }
         catch (Exception e)
         {
@@ -92,7 +112,7 @@ public class Startup implements Runnable
         }
 
 
-        Store store = new Store(databaseProvider, lock);
+        Store store = new Store(streamingProvider, databaseProvider, lock);
 
         JsonServer jsonSocketServer = new JsonServer(configuration.getJsonServer().getIP(), configuration.getJsonServer().getPort(), store);
         jsonSocketServer.initialize();

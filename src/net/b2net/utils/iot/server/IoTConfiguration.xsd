@@ -1,58 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- edited with XMLSpy v2008 rel. 2 (http://www.altova.com) by mazuki (darksiderg) -->
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified"
-           attributeFormDefault="unqualified">
-    <xs:element name="IoTConfiguration">
-        <xs:annotation>
-            <xs:documentation>IoT Server configuration</xs:documentation>
-        </xs:annotation>
-        <xs:complexType>
-            <xs:all>
-                <xs:element name="Server">
-                    <xs:complexType>
-                        <xs:attribute name="IP" type="xs:string" use="optional" default="0.0.0.0">
-                            <xs:annotation>
-                                <xs:documentation>IP to bind - default 0.0.0.0</xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                        <xs:attribute name="Port" type="xs:int" use="optional" default="5409">
-                            <xs:annotation>
-                                <xs:documentation>Port - default 5409</xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                    </xs:complexType>
-                </xs:element>
-                <xs:element name="JsonServer">
-                    <xs:complexType>
-                        <xs:attribute name="IP" type="xs:string" use="optional" default="0.0.0.0">
-                            <xs:annotation>
-                                <xs:documentation>IP to bind - default 0.0.0.0</xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                        <xs:attribute name="Port" type="xs:int" use="optional" default="5408">
-                            <xs:annotation>
-                                <xs:documentation>Port - default 5409</xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                    </xs:complexType>
-                </xs:element>
-                <xs:element name="DatabaseProvider">
-                    <xs:complexType>
-                        <xs:attribute name="Instance" type="xs:string" use="optional"
-                                      default="net.b2net.utils.iot.server.storage.DatabaseProviderPgSQL">
-                            <xs:annotation>
-                                <xs:documentation>The instance used for storage</xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                        <xs:attribute name="Args" type="xs:string" use="optional" default="">
-                            <xs:annotation>
-                                <xs:documentation>Array of arguments that will be passed to the above instance
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:element name="IoTConfiguration">
+		<xs:annotation>
+			<xs:documentation>IoT Server configuration</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:all>
+				<xs:element name="Server">
+					<xs:complexType>
+						<xs:attribute name="IP" type="xs:string" use="optional" default="0.0.0.0">
+							<xs:annotation>
+								<xs:documentation>IP to bind - default 0.0.0.0</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+						<xs:attribute name="Port" type="xs:int" use="optional" default="5409">
+							<xs:annotation>
+								<xs:documentation>Port - default 5409</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+					</xs:complexType>
+				</xs:element>
+				<xs:element name="JsonServer">
+					<xs:complexType>
+						<xs:attribute name="IP" type="xs:string" use="optional" default="0.0.0.0">
+							<xs:annotation>
+								<xs:documentation>IP to bind - default 0.0.0.0</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+						<xs:attribute name="Port" type="xs:int" use="optional" default="5408">
+							<xs:annotation>
+								<xs:documentation>Port - default 5409</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+					</xs:complexType>
+				</xs:element>
+				<xs:element name="DatabaseProvider">
+					<xs:complexType>
+						<xs:attribute name="Instance" type="xs:string" use="optional" default="net.b2net.utils.iot.server.storage.DatabaseProviderPgSQL">
+							<xs:annotation>
+								<xs:documentation>The instance used for storage</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+						<xs:attribute name="Args" type="xs:string" use="optional" default="">
+							<xs:annotation>
+								<xs:documentation>Array of arguments that will be passed to the above instance
                                 </xs:documentation>
-                            </xs:annotation>
-                        </xs:attribute>
-                    </xs:complexType>
-                </xs:element>
-            </xs:all>
-        </xs:complexType>
-    </xs:element>
+							</xs:annotation>
+						</xs:attribute>
+					</xs:complexType>
+				</xs:element>
+				<xs:element name="StreamingProvider">
+					<xs:complexType>
+						<xs:attribute name="Instance" type="xs:string" use="optional" default="">
+							<xs:annotation>
+								<xs:documentation>The instance used for streaming provdier</xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+						<xs:attribute name="Args" type="xs:string" use="optional" default="">
+							<xs:annotation>
+								<xs:documentation>Array of arguments that will be passed to the above instance ( space separated )
+                                </xs:documentation>
+							</xs:annotation>
+						</xs:attribute>
+					</xs:complexType>
+				</xs:element>
+			</xs:all>
+		</xs:complexType>
+	</xs:element>
 </xs:schema>

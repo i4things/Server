@@ -33,15 +33,17 @@ class Store
     private final GatewayBuffer gatewayBuffer = new GatewayBuffer();
 
     private final DatabaseProvider databaseProvider;
+    private final StreamingProvider streamingProvider;
 
     private final ReadWriteLock lock;
 
 
-    Store(final DatabaseProvider databaseProvider,
+    Store(final StreamingProvider streamingProvider,
+          final DatabaseProvider databaseProvider,
           final ReadWriteLock lock)
     {
         this.databaseProvider = databaseProvider;
-
+        this.streamingProvider = streamingProvider;
         this.lock = lock;
     }
 
@@ -139,6 +141,14 @@ class Store
             pckt.position(0);
             pckt.get(data);
             storeTuple.getLast().get().add(0, new StoreElement(data, now));
+
+            if (streamingProvider != null)
+            {
+                if ( streamingProvider.isSubscribed(device_id.longValue()))
+                {
+                    streamingProvider.dataReceived(device_id.longValue(),extract_data(device_id.longValue(), true, 0));
+                }
+            }
 
         }
         catch (Throwable th)
