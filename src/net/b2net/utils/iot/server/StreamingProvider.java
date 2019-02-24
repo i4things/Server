@@ -22,9 +22,11 @@ public interface StreamingProvider
     // need to be thread safe as can be called from different threads
     public boolean isSubscribed(long id);
 
-    // data for the specific id is received  ( data is in js/JSON format )
+    // data for the specific id is received
+    // if you need data in JSON format just call toString() method
     // need to be thread safe as can be called from different threads
-    public void dataReceived(long id, UUID accountId, String data);
+    public void dataReceived(UUID accountId, IoTData data);
+
 
     // init arguments
     public void initialize(String[] args);

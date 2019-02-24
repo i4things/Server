@@ -144,9 +144,11 @@ class Store
 
             if (streamingProvider != null)
             {
-                if ( streamingProvider.isSubscribed(device_id.longValue()))
+                if (streamingProvider.isSubscribed(device_id.longValue()))
                 {
-                    streamingProvider.dataReceived(device_id.longValue(), databaseProvider.getDataRole().getAccount(device_id.longValue()),extract_data(device_id.longValue(), true, 0));
+                    IoTData raw_data = new IoTData();
+                    extract_data(device_id.longValue(), true, 0, raw_data);
+                    streamingProvider.dataReceived(databaseProvider.getDataRole().getAccount(device_id.longValue()), raw_data);
                 }
             }
 
@@ -402,20 +404,37 @@ class Store
         }
     }
 
-    String extract_data(final long device_id, final boolean top, final long from)
+    // if iot_data != null and top is true then we return null and get teh binary format only
+    String extract_data(final long device_id, final boolean top, final long from, IoTData iot_data)
     {
         StringBuilder sb = new StringBuilder();
+        String ret = null;
 
         lock.readLock().lock();
         try
         {
-            sb.append("var iot_json = '{");
-            sb.append("\"thing\": ").append(device_id).append(",");
+
+            if (top && (iot_data != null))
+            {
+                iot_data.setThing(device_id);
+            }
+            else
+            {
+                sb.append("var iot_json = '{");
+                sb.append("\"thing\": ").append(device_id).append(",");
+            }
+
 
             StoreTupleIoT storeTuple = databaseProvider.getStoreData().getStore().get(new Long(device_id));
 
-
-            sb.append("\"last\": [");
+            if (top && (iot_data != null))
+            {
+                // nothing to do in binary format
+            }
+            else
+            {
+                sb.append("\"last\": [");
+            }
             if (storeTuple != null)
             {
 
@@ -477,13 +496,25 @@ class Store
                             break;
                         }
 
-                        sb.append("{");
-                        sb.append("\"t\": ").append(timestamp).append(", ");
-                        if (pos != null)
+                        if (top && (iot_data != null))
                         {
-                            sb.append("\"l\": ").append(Utils.df6.get().format(pos[0])).append(", ");
-                            sb.append("\"n\": ").append(Utils.df6.get().format(pos[1])).append(", ");
+                            iot_data.setTimestamp(timestamp);
+                            iot_data.setLat(pos[0]);
+                            iot_data.setLon(pos[1]);
                         }
+                        else
+                        {
+
+                            sb.append("{");
+                            sb.append("\"t\": ").append(timestamp).append(", ");
+                            if (pos != null)
+                            {
+                                sb.append("\"l\": ").append(Utils.df6.get().format(pos[0])).append(", ");
+                                sb.append("\"n\": ").append(Utils.df6.get().format(pos[1])).append(", ");
+                            }
+                        }
+
+
                         ByteBuffer pckt = ByteBuffer.wrap(data);
                         pckt.order(Processor.ORDER);
 
@@ -503,18 +534,30 @@ class Store
                         Utils.getOTS(pckt); // gateway_id // hard coded to 10 - e.g. destination
                         Utils.getOTS(pckt); // device_id
 
-                        sb.append("\"r\": ").append(rssi).append(", ");
-                        sb.append("\"d\": ").append("[ ");
-                        for (; pckt.hasRemaining(); )
+                        if (top && (iot_data != null))
                         {
-                            sb.append(Integer.toString(pckt.get() & 0xFF));
-                            if (pckt.hasRemaining())
-                            {
-                                sb.append(", ");
-                            }
+                            iot_data.setRssi((byte) rssi);
+                            iot_data.setLat(pos[0]);
+                            iot_data.setLon(pos[1]);
+                            byte[] raw_data = new byte[pckt.remaining()];
+                            pckt.get(raw_data);
+                            iot_data.setData(raw_data);
                         }
-                        sb.append("] },");
+                        else
+                        {
+                            sb.append("\"r\": ").append(rssi).append(", ");
+                            sb.append("\"d\": ").append("[ ");
 
+                            for (; pckt.hasRemaining(); )
+                            {
+                                sb.append(Integer.toString(pckt.get() & 0xFF));
+                                if (pckt.hasRemaining())
+                                {
+                                    sb.append(", ");
+                                }
+                            }
+                            sb.append("] },");
+                        }
 
                         if (top)
                         {
@@ -536,16 +579,30 @@ class Store
                     }
                 }
 
-                if (storeTuple.getLast().get().size() > 0)
+                if (top && (iot_data != null))
                 {
-                    sb.setLength(sb.length() - 1);
+                    // nothing to do in binary format
+                }
+                else
+                {
+                    if (storeTuple.getLast().get().size() > 0)
+                    {
+                        sb.setLength(sb.length() - 1);
+                    }
                 }
             }
-            sb.append("]");
+            if (top && (iot_data != null))
+            {
+                // nothing to do in binary format
+            }
+            else
+            {
+                sb.append("]");
+                sb.append("}';\n");
+                ret = sb.toString();
+            }
 
-            sb.append("}';\n");
-
-            return sb.toString();
+            return ret;
         }
         catch (Throwable th)
         {
@@ -557,6 +614,7 @@ class Store
             lock.readLock().unlock();
         }
     }
+
 
     String get_iot_get(final long device_id, final String challenge, final boolean top, final long from)
     {
@@ -601,7 +659,7 @@ class Store
 
         // all good and valid continue
 
-        return extract_data(device_id, top, from);
+        return extract_data(device_id, top, from, null);
     }
 
 
