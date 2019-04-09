@@ -8,7 +8,6 @@ import net.b2net.utils.iot.nio.handlers.PacketChannel;
 import net.b2net.utils.iot.nio.handlers.PacketChannelListener;
 import net.b2net.utils.iot.nio.io.SelectorThread;
 
-
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
@@ -52,7 +51,7 @@ class Server implements AcceptorListener, PacketChannelListener
     private final DoSPreventer preventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
 
     private final int THREAD_POOL_SIZE = 16;
-    private final Thread[] pool = new Thread[THREAD_POOL_SIZE -1];
+    private final Thread[] pool = new Thread[THREAD_POOL_SIZE - 1];
 
     Server(String address,
            int port,
@@ -62,7 +61,7 @@ class Server implements AcceptorListener, PacketChannelListener
         this.port = port;
         this.processor = new Processor(store);
 
-        for (int i = 0; i < (THREAD_POOL_SIZE -1); i++)
+        for (int i = 0; i < (THREAD_POOL_SIZE - 1); i++)
         {
             pool[i] = new Thread(new Runnable()
             {
@@ -143,7 +142,7 @@ class Server implements AcceptorListener, PacketChannelListener
         logger.info("Socket server started");
 
         // start all pool treads
-        for (int i = 0; i < (THREAD_POOL_SIZE -1); i++)
+        for (int i = 0; i < (THREAD_POOL_SIZE - 1); i++)
         {
             pool[i].setDaemon(true);
             pool[i].start();
@@ -307,8 +306,11 @@ class Server implements AcceptorListener, PacketChannelListener
                 @Override
                 public void run()
                 {
-                    logger.fine("Socket exception for client " + pc.getRemoteAddress());
-                    Print.printStackTrace(ex, logger);
+                    if (logger.isLoggable(Level.FINE))
+                    {
+                        logger.fine("Socket exception for client " + pc.getRemoteAddress());
+                        Print.printStackTrace(ex, logger);
+                    }
                 }
             });
         }
@@ -335,7 +337,10 @@ class Server implements AcceptorListener, PacketChannelListener
                 public void run()
                 {
                     processor.disconnect(pc);
-                    logger.fine("Client goes away: " + pc.getRemoteAddress());
+                    if (logger.isLoggable(Level.FINE))
+                    {
+                        logger.fine("Client goes away: " + pc.getRemoteAddress());
+                    }
                 }
             });
         }

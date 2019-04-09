@@ -1,4 +1,4 @@
-package net.b2net.utils.iot.server;
+package  net.b2net.utils.iot.server;
 
 
 import net.b2net.utils.iot.common.logger.Print;
@@ -7,7 +7,6 @@ import net.b2net.utils.iot.nio.handlers.AcceptorListener;
 import net.b2net.utils.iot.nio.handlers.PacketChannel;
 import net.b2net.utils.iot.nio.handlers.PacketChannelListener;
 import net.b2net.utils.iot.nio.io.SelectorThread;
-
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -18,6 +17,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -54,11 +54,14 @@ class JsonServer implements AcceptorListener, PacketChannelListener
     // delay cleanup
     private final static int MAX_CONNECTIONS_PER_TIMEOUT = 512;
     private final static long MAX_TIME_WITHOUT_PACKET = 60 * 1000; // 1 min
+    private final static long CONNECTION_ABUSE_BACK_OFF_TIMEOUT = 60 * 1000; // 1min
 
-    private final DoSPreventer preventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
+    private final DoSPreventer dosPreventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
+    private final ConnectPreventer connPreventer = new ConnectPreventer(CONNECTION_ABUSE_BACK_OFF_TIMEOUT);
 
     private final int THREAD_POOL_SIZE = 16;
     private final Thread[] pool = new Thread[THREAD_POOL_SIZE];
+
 
     JsonServer(String address,
                int port,
@@ -182,7 +185,12 @@ class JsonServer implements AcceptorListener, PacketChannelListener
 
             pc.reactivateReading();
 
-            if (!preventer.newConnection(pc))
+            if (!dosPreventer.newConnection(pc))
+            {
+                // not allowed - kill it
+                pc.close();
+            }
+            else if (!connPreventer.checkConnection(pc))
             {
                 // not allowed - kill it
                 pc.close();
@@ -239,14 +247,24 @@ class JsonServer implements AcceptorListener, PacketChannelListener
                         {
                             r = r.substring(3).trim();
 
-                            byte[] rs = toHttpResponse(processor.process(r)).getBytes(StandardCharsets.UTF_8);
+                            AtomicBoolean err = new AtomicBoolean(false);
+
+                            String ret = processor.process(r, err);
+                            byte[] rs = toHttpResponse(ret).getBytes(StandardCharsets.UTF_8);
 
                             ByteBuffer res = ByteBuffer.allocate(rs.length).put(rs);
                             res.position(0);
 
                             pc.sendPacket(res);
 
-                            preventer.newPacket(pc);
+                            dosPreventer.newPacket(pc);
+
+                            if (err.get())
+                            {
+                                connPreventer.addConnection(pc);
+                                logger.warning("Connection [" + pc.getRemoteIPAddress() + "] stopped temporary. Reason : " + ret);
+                                pc.close();
+                            }
 
                         }
                     }
@@ -277,6 +295,7 @@ class JsonServer implements AcceptorListener, PacketChannelListener
     @Override
     public void socketException(final PacketChannel pc, final Exception ex)
     {
+        logger.info("Socket exception");
         try
         {
             workerQueueServerProcessing.put(new Runnable()
@@ -284,8 +303,11 @@ class JsonServer implements AcceptorListener, PacketChannelListener
                 @Override
                 public void run()
                 {
-                    logger.fine("Socket exception for client " + pc.getRemoteAddress());
-                    Print.printStackTrace(ex, logger);
+                    if (logger.isLoggable(Level.FINE))
+                    {
+                        logger.fine("Socket exception for client " + pc.getRemoteAddress());
+                        Print.printStackTrace(ex, logger);
+                    }
                 }
             });
         }
@@ -311,7 +333,10 @@ class JsonServer implements AcceptorListener, PacketChannelListener
                 @Override
                 public void run()
                 {
-                    logger.fine("Client goes away: " + pc.getRemoteAddress());
+                    if (logger.isLoggable(Level.FINE))
+                    {
+                        logger.fine("Client goes away: " + pc.getRemoteAddress());
+                    }
                 }
             });
         }

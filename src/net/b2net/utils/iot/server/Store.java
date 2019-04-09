@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.logging.Logger;
 
@@ -147,7 +148,7 @@ class Store
                 if (streamingProvider.isSubscribed(device_id.longValue()))
                 {
                     IoTData raw_data = new IoTData();
-                    extract_data(device_id.longValue(), true, 0, raw_data);
+                    extract_data(device_id.longValue(), true, 0, raw_data, new AtomicBoolean(false));
                     streamingProvider.dataReceived(databaseProvider.getDataRole().getAccount(device_id.longValue()), raw_data);
                 }
             }
@@ -220,7 +221,7 @@ class Store
     }
 
 
-    String get_iot_hist(final long device_id, final int dey_idx, String challenge)
+    String get_iot_hist(final long device_id, final int dey_idx, String challenge, AtomicBoolean err)
     {
         //check challenge
 
@@ -229,14 +230,14 @@ class Store
         {
 
             logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
-            return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
 
         }
 
         byte[] challenge_arr = Utils.fromHex(challenge);
         if (challenge_arr == null)
         {
-            return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
         }
 
         ByteBuffer crc_data = ByteBuffer.wrap(XXTEABin.xxteaDecrypt(challenge_arr, network_key));
@@ -250,7 +251,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : sign invalid.");
-            return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
         }
 
         crc_data.position(timestamp_pos);
@@ -260,7 +261,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : challenge timeout.");
-            return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
         }
 
         // all good and valid continue
@@ -396,7 +397,7 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
         }
         finally
         {
@@ -405,7 +406,7 @@ class Store
     }
 
     // if iot_data != null and top is true then we return null and get teh binary format only
-    String extract_data(final long device_id, final boolean top, final long from, IoTData iot_data)
+    String extract_data(final long device_id, final boolean top, final long from, IoTData iot_data, AtomicBoolean err)
     {
         StringBuilder sb = new StringBuilder();
         String ret = null;
@@ -607,7 +608,7 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
         }
         finally
         {
@@ -616,7 +617,7 @@ class Store
     }
 
 
-    String get_iot_get(final long device_id, final String challenge, final boolean top, final long from)
+    String get_iot_get(final long device_id, final String challenge, final boolean top, final long from, AtomicBoolean err)
     {
         //check challenge
 
@@ -624,13 +625,13 @@ class Store
         if (network_key == null)
         {
             logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
-            return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
         }
 
         byte[] challenge_arr = Utils.fromHex(challenge);
         if (challenge_arr == null)
         {
-            return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
         }
 
         ByteBuffer crc_data = ByteBuffer.wrap(XXTEABin.xxteaDecrypt(challenge_arr, network_key));
@@ -644,7 +645,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : sign invalid.");
-            return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
         }
 
         crc_data.position(timestamp_pos);
@@ -654,12 +655,12 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : challenge timeout.");
-            return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
         }
 
         // all good and valid continue
 
-        return extract_data(device_id, top, from, null);
+        return extract_data(device_id, top, from, null, new AtomicBoolean(false));
     }
 
 
@@ -705,19 +706,19 @@ class Store
     }
 
 
-    String get_iot_set(final long device_id, final String challenge_hex, final String data_hex)
+    String get_iot_set(final long device_id, final String challenge_hex, final String data_hex, AtomicBoolean err)
     {
         byte[] network_key = databaseProvider.getDataRole().getNodeNetworkKey(device_id);
         if (network_key == null)
         {
             logger.severe("Protocol mismatch : NODE[" + device_id + "] not found.");
-            return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"node not found\" }';\n";
         }
 
         byte[] challenge_arr = Utils.fromHex(challenge_hex);
         if (challenge_arr == null)
         {
-            return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"wrong format\" }';\n";
         }
 
         ByteBuffer crc_data = ByteBuffer.wrap(XXTEABin.xxteaDecrypt(challenge_arr, network_key));
@@ -731,7 +732,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : sign invalid.");
-            return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"sign invalid\" }';\n";
         }
 
         crc_data.position(timestamp_pos);
@@ -741,7 +742,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : challenge timeout.");
-            return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"timeout\" }';\n";
         }
 
 
@@ -751,7 +752,7 @@ class Store
         {
             // not our protocol
             logger.severe("Protocol mismatch : message too big : " + data_arr.length);
-            return "var iot_json = '{ \"ERR\" : \"message too big\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"message too big\" }';\n";
         }
 
         // all good and valid continue
@@ -802,19 +803,19 @@ class Store
                         return "var iot_json = '{ \"RES\" : \"OK\" }';";
                     }
 
-                    return "var iot_json = '{ \"ERR\" : \"message empty\" }';";
+                    err.set(true); return "var iot_json = '{ \"ERR\" : \"message empty\" }';";
 
                 }
 
             }
 
-            return "var iot_json = '{ \"ERR\" : \"no data from node\" }';";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"no data from node\" }';";
 
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
+            err.set(true); return "var iot_json = '{ \"ERR\" : \"exception\" }';\n";
         }
         finally
         {
@@ -901,7 +902,7 @@ class Store
         return new double[]{lat, lon};
     }
 
-    String get_mc_reg_facilitator(String payload)
+    String get_mc_reg_facilitator(String payload, AtomicBoolean err)
     {
         try
         {
@@ -911,47 +912,47 @@ class Store
             //FFFF516210150A0D2E171E0B510B0F101626{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}MYFACILITATOR
             if (crc_key_str_guid.length() < 75)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_key_str_guid.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_key_str_guid.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_key = crc_key_str_guid.substring(4, 36);
             byte[] facilitatorKey = Utils.fromHex(str_key);
             if (facilitatorKey == null)
             {
-                return "WRNG5[KEY]";
+                err.set(true); return "WRNG5[KEY]";
             }
             String str_guid = crc_key_str_guid.substring(37, 73);
             UUID facilitatorId = UUID.fromString(str_guid);
             if (!databaseProvider.getDataRole().addFacilitator(facilitatorId, facilitatorKey, crc_key_str_guid.substring(74)))
             {
-                return "WRNG6[DUP]";
+                err.set(true); return "WRNG6[DUP]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_reg_account(String str_falilitatorId, String payload)
+    String get_mc_reg_account(String str_falilitatorId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_falilitatorId.length() < 38)
             {
-                return "WRNG1[" + str_falilitatorId + "]";
+                err.set(true); return "WRNG1[" + str_falilitatorId + "]";
             }
             UUID facilitatorId = UUID.fromString(str_falilitatorId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getFacilitatorNetworkKey(facilitatorId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_key_str_guid = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4         5         6         7
@@ -959,47 +960,47 @@ class Store
             //FFFF516210150A0D2E171E0B510B0F101626{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}MYACCOUNT
             if (crc_key_str_guid.length() < 75)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_key_str_guid.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_key_str_guid.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_key = crc_key_str_guid.substring(4, 36);
             byte[] accountKey = Utils.fromHex(str_key);
             if (accountKey == null)
             {
-                return "WRNG5[KEY]";
+                err.set(true); return "WRNG5[KEY]";
             }
             String str_guid = crc_key_str_guid.substring(37, 73);
             UUID accountId = UUID.fromString(str_guid);
             if (!databaseProvider.getDataRole().addAccount(accountId, facilitatorId, accountKey, crc_key_str_guid.substring(74)))
             {
-                return "WRNG6[DUP]";
+                err.set(true); return "WRNG6[DUP]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_reg_node(String str_accountId, String payload)
+    String get_mc_reg_node(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_key = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1007,46 +1008,46 @@ class Store
             //FFFF516210150A0D2E171E0B510B0F101626MYNODE
             if (crc_key.length() < 37)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_key.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_key.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_key = crc_key.substring(4, 36);
             byte[] nodeKey = Utils.fromHex(str_key);
             if (nodeKey == null)
             {
-                return "WRNG5[KEY]";
+                err.set(true); return "WRNG5[KEY]";
             }
             Long nodeId = databaseProvider.getDataRole().addNode(accountId, nodeKey, crc_key.substring(36));
             if (nodeId == null)
             {
-                return "WRNG6[DUP]";
+                err.set(true); return "WRNG6[DUP]";
             }
             return nodeId.toString();
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_reg_gateway(String str_accountId, String payload)
+    String get_mc_reg_gateway(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_key_pos = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1054,47 +1055,47 @@ class Store
             //FFFF516210150A0D2E171E0B510B0F101626#MYGATEWAY#51.438939#-0.218631#1
             if (crc_key_pos.length() < 36)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_key_pos.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_key_pos.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_key = crc_key_pos.substring(4, 36);
             byte[] gatewayKey = Utils.fromHex(str_key);
             if (gatewayKey == null)
             {
-                return "WRNG5[KEY]";
+                err.set(true); return "WRNG5[KEY]";
             }
             String[] pos_open = crc_key_pos.substring(37).split("#");
             Long gatewayId = databaseProvider.getDataRole().addGateway(accountId, gatewayKey, Double.parseDouble(pos_open[1]), Double.parseDouble(pos_open[2]), (pos_open[3].compareTo("1") == 0), pos_open[0]);
             if (gatewayId == null)
             {
-                return "WRNG6[DUP]";
+                err.set(true); return "WRNG6[DUP]";
             }
             return gatewayId.toString();
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_del_gateway(String str_accountId, String payload)
+    String get_mc_del_gateway(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1102,41 +1103,41 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
 
             if (!databaseProvider.getDataRole().removeGateway(Long.parseLong(str_id)))
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_del_node(String str_accountId, String payload)
+    String get_mc_del_node(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1144,41 +1145,41 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
 
             if (!databaseProvider.getDataRole().removeNode(Long.parseLong(str_id)))
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_del_account(String str_facilitatorId, String payload)
+    String get_mc_del_account(String str_facilitatorId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_facilitatorId.length() < 38)
             {
-                return "WRNG1[" + str_facilitatorId + "]";
+                err.set(true); return "WRNG1[" + str_facilitatorId + "]";
             }
             UUID facilitatorId = UUID.fromString(str_facilitatorId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getFacilitatorNetworkKey(facilitatorId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4
@@ -1186,30 +1187,30 @@ class Store
             //FFFF{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}
             if (crc_id.length() < 42)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_guid = crc_id.substring(5, 41);
             UUID accountId = UUID.fromString(str_guid);
             if (!databaseProvider.getDataRole().removeAccount(accountId))
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_del_facilitator(String payload)
+    String get_mc_del_facilitator(String payload, AtomicBoolean err)
     {
         try
         {
@@ -1219,30 +1220,30 @@ class Store
             //FFFF{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}
             if (crc_id.length() < 42)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_guid = crc_id.substring(5, 41);
             UUID facilitatorId = UUID.fromString(str_guid);
             if (!databaseProvider.getDataRole().removeFacilitator(facilitatorId))
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return "OK";
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_facilitator(String payload)
+    String get_mc_get_facilitator(String payload, AtomicBoolean err)
     {
         try
         {
@@ -1252,12 +1253,12 @@ class Store
             //FFFF12345678
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_time = crc_id.substring(4);
@@ -1265,36 +1266,36 @@ class Store
 
             if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
             {
-                return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
+                err.set(true); return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
             }
 
             String ret = databaseProvider.getDataRole().getFacilitator();
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_account(String str_facilitatorId, String payload)
+    String get_mc_get_account(String str_facilitatorId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_facilitatorId.length() < 38)
             {
-                return "WRNG1[" + str_facilitatorId + "]";
+                err.set(true); return "WRNG1[" + str_facilitatorId + "]";
             }
             UUID facilitatorId = UUID.fromString(str_facilitatorId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getFacilitatorNetworkKey(facilitatorId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4
@@ -1302,12 +1303,12 @@ class Store
             //FFFF12345678
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_time = crc_id.substring(4);
@@ -1315,36 +1316,36 @@ class Store
 
             if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
             {
-                return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
+                err.set(true); return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
             }
 
             String ret = databaseProvider.getDataRole().getAccount(facilitatorId);
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_gateway(String str_accountId, String payload)
+    String get_mc_get_gateway(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4
@@ -1352,12 +1353,12 @@ class Store
             //FFFF12345678
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_time = crc_id.substring(4);
@@ -1365,36 +1366,36 @@ class Store
 
             if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
             {
-                return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
+                err.set(true); return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
             }
 
             String ret = databaseProvider.getDataRole().getGateway(accountId);
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_node(String str_accountId, String payload)
+    String get_mc_get_node(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4
@@ -1402,12 +1403,12 @@ class Store
             //FFFF12345678
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_time = crc_id.substring(4);
@@ -1415,36 +1416,36 @@ class Store
 
             if ((System.currentTimeMillis() - timestamp_utc) > Utils.CHALLENGE_TIMEOUT)
             {
-                return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
+                err.set(true); return "WRNG5[" + (System.currentTimeMillis() - timestamp_utc) + "]" + "SERVER TIMESTAMP[" + System.currentTimeMillis() + "]CLIENT TIMESTAMP[" + timestamp_utc + "]";
             }
 
             String ret = databaseProvider.getDataRole().getNode(accountId);
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_gateway_details(String str_accountId, String payload)
+    String get_mc_get_gateway_details(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1452,19 +1453,19 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
 
             String ret = databaseProvider.getDataRole().getGatewayDetails(accountId, Long.parseLong(str_id));
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
 
@@ -1472,23 +1473,23 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_node_details(String str_accountId, String payload)
+    String get_mc_get_node_details(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1496,19 +1497,19 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
 
             String ret = databaseProvider.getDataRole().getNodeDetails(accountId, Long.parseLong(str_id));
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
 
@@ -1516,23 +1517,23 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_account_details(String str_facilitatorId, String payload)
+    String get_mc_get_account_details(String str_facilitatorId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_facilitatorId.length() < 38)
             {
-                return "WRNG1[" + str_facilitatorId + "]";
+                err.set(true); return "WRNG1[" + str_facilitatorId + "]";
             }
             UUID facilitatorId = UUID.fromString(str_facilitatorId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getFacilitatorNetworkKey(facilitatorId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3         4
@@ -1540,12 +1541,12 @@ class Store
             //FFFF{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}
             if (crc_id.length() < 42)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_guid = crc_id.substring(5, 41);
@@ -1554,7 +1555,7 @@ class Store
             String ret = databaseProvider.getDataRole().getAccountDetails(facilitatorId, accountId);
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
 
@@ -1562,11 +1563,11 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_get_facilitator_details(String payload)
+    String get_mc_get_facilitator_details(String payload, AtomicBoolean err)
     {
         try
         {
@@ -1576,12 +1577,12 @@ class Store
             //FFFF{9C0A620B-3400-4F5D-87DD-D4133C4D4C52}
             if (crc_id.length() < 42)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
 
             String str_guid = crc_id.substring(5, 41);
@@ -1590,30 +1591,30 @@ class Store
             String ret = databaseProvider.getDataRole().getFacilitatorDetails(facilitatorId);
             if (ret == null)
             {
-                return "WRNG6[NOT FOUND]";
+                err.set(true); return "WRNG6[NOT FOUND]";
             }
             return ret;
         }
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_node_data(String str_accountId, String payload)
+    String get_mc_node_data(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1621,19 +1622,19 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
 
             //check node ownership
             if (!databaseProvider.getDataRole().matchNodeAccount(accountId, Long.parseLong(str_id)))
             {
-                return "WRNG5[OWNERSHIP]";
+                err.set(true); return "WRNG5[OWNERSHIP]";
             }
 
             ArrayList<String> labels = new ArrayList<String>();
@@ -1786,23 +1787,23 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 
-    String get_mc_gateway_data(String str_accountId, String payload)
+    String get_mc_gateway_data(String str_accountId, String payload, AtomicBoolean err)
     {
         try
         {
             if (str_accountId.length() < 38)
             {
-                return "WRNG1[" + str_accountId + "]";
+                err.set(true); return "WRNG1[" + str_accountId + "]";
             }
             UUID accountId = UUID.fromString(str_accountId.substring(1, 37));
             byte[] array_key = databaseProvider.getDataRole().getAccountNetworkKey(accountId);
             if (array_key == null)
             {
-                return "WRNG2[CANNOT GET KEY]";
+                err.set(true); return "WRNG2[CANNOT GET KEY]";
             }
             String crc_id = XXTEAString.decryptBase64StringToString(payload, Utils.toHex(array_key));
             //          1         2         3
@@ -1810,18 +1811,18 @@ class Store
             //FFFF5136
             if (crc_id.length() < 5)
             {
-                return "WRNG3[SIGN]";
+                err.set(true); return "WRNG3[SIGN]";
             }
             String crc = crc_id.substring(0, 4);
             if (crc.compareTo(XXTEACRCString.crc(crc_id.substring(4))) != 0)
             {
-                return "WRNG4[SIGN]";
+                err.set(true); return "WRNG4[SIGN]";
             }
             String str_id = crc_id.substring(4);
             //check gateway ownership
             if (!databaseProvider.getDataRole().matchGatewayAccount(accountId, Long.parseLong(str_id)))
             {
-                return "WRNG5[OWNERSHIP]";
+                err.set(true); return "WRNG5[OWNERSHIP]";
             }
 
             ArrayList<String> labels = new ArrayList<String>();
@@ -1969,7 +1970,7 @@ class Store
         catch (Throwable th)
         {
             Print.printStackTrace(th, logger);
-            return "WRNG7[" + th.getMessage() + "]";
+            err.set(true); return "WRNG7[" + th.getMessage() + "]";
         }
     }
 

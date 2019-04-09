@@ -1,4 +1,4 @@
-package net.b2net.utils.iot.server;
+package  net.b2net.utils.iot.server;
 
 import net.b2net.utils.iot.common.logger.Print;
 import net.b2net.utils.iot.nio.handlers.PacketChannel;
@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  */
 class DoSPreventer
 {
-    private static final Logger logger = Logger.getLogger(Server.class.getCanonicalName());
+    private static final Logger logger = Logger.getLogger(DoSPreventer.class.getCanonicalName());
 
     private final int MAX_CONNECTIONS_PER_TIMEOUT;
     private final long MAX_TIME_WITHOUT_PACKET;
@@ -123,7 +123,7 @@ class DoSPreventer
                 }
             }
         }
-    }, "IoTDoSPreventer:worker");
+    }, "DoSPreventer:worker");
 
 
     private final Object sync = new Object();
@@ -144,13 +144,13 @@ class DoSPreventer
     {
         synchronized (sync)
         {
-            AtomicInteger refCount = ipRefCount.get(pc.getRemoteAddress());
+            AtomicInteger refCount = ipRefCount.get(pc.getRemoteIPAddress());
             boolean ret = true;
             if (refCount == null)
             {
                 try
                 {
-                    ipRefCount.put(pc.getRemoteAddress(), new AtomicInteger(1));
+                    ipRefCount.put(pc.getRemoteIPAddress(), new AtomicInteger(1));
                     workerQueue.put(new DelayClean(CONNECTION_RESET_TIMEOUT, new Executable()
                     {
                         @Override
@@ -158,7 +158,7 @@ class DoSPreventer
                         {
                             synchronized (sync)
                             {
-                                ipRefCount.remove(pc.getRemoteAddress());
+                                ipRefCount.remove(pc.getRemoteIPAddress());
                             }
 
                             return false;
