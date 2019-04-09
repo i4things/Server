@@ -29,6 +29,7 @@ import net.b2net.utils.iot.nio.io.ReadWriteSelectorHandler;
 import net.b2net.utils.iot.nio.io.SelectorThread;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -68,6 +69,11 @@ public final class PacketChannel extends TagedHandler implements ReadWriteSelect
      * Remote address
      */
     private final String remoteAddress;
+
+    /**
+     * Remote address
+     */
+    private final String remoteIPAddress;
 
     // outgoing buffers and queue
     private final static int cacheDenominator = 4;
@@ -172,6 +178,7 @@ public final class PacketChannel extends TagedHandler implements ReadWriteSelect
 
         this.listener = listener;
         this.remoteAddress = sc.socket().getRemoteSocketAddress().toString();
+        this.remoteIPAddress = (((InetSocketAddress) sc.socket().getRemoteSocketAddress()).getAddress()).toString().replace("/","");
 
         // Registers with read interest.
         selector.registerChannel(sc, SelectionKey.OP_READ, this);
@@ -714,6 +721,11 @@ public final class PacketChannel extends TagedHandler implements ReadWriteSelect
     public String getRemoteAddress()
     {
         return remoteAddress;
+    }
+
+    public String getRemoteIPAddress()
+    {
+        return remoteIPAddress;
     }
 
     // debug routines
