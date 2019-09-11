@@ -11,21 +11,23 @@ import java.util.logging.Logger;
 
 public class FileStorageBase
 {
-    private static final Logger logger = Logger.getLogger(FileStorageBase.class.getCanonicalName());
+   private static final Logger logger = Logger.getLogger(FileStorageBase.class.getCanonicalName());
 
     private String save_folder = null;
 
     private static final int BACKUP_CNT = 10;
-    private static final String BACKUP_NAME_STORE = "IOT_STORE.";
-    private static final String BACKUP_NAME_ROLE = "IOT_ROLE.";
+    private static final int FILE_BUFFER_SIZE = 64 * 1024;
+    private static final String BACKUP_NAME_STORE = "GETIX_STORE.";
+    private static final String BACKUP_NAME_ROLE = "GETIX_ROLE.";
     private static final String BACKUP_EXT = "DAT";
     private long BACKUP_TIMEOUT; // msec
     private StoreDataIoT storeData = new StoreDataIoT();
+    private StoreDataRole storeDataRole = new StoreDataRole();
     private DataRole storeRole = null;
 
     private ReadWriteLock lock;
 
-    transient Thread backupThread = new Thread(new Runnable()
+    private Thread backupThread = new Thread(new Runnable()
     {
         @Override
         public void run()
@@ -34,18 +36,26 @@ public class FileStorageBase
             {
                 try
                 {
-                    Thread.sleep(BACKUP_TIMEOUT);
-                }
-                catch (InterruptedException e)
-                {
-                    // not interested
-                }
+                    try
+                    {
+                        Thread.sleep(BACKUP_TIMEOUT);
+                    }
+                    catch (InterruptedException e)
+                    {
+                        // not interested
+                    }
 
-                saveStore();
-                saveRole();
+                    saveStore();
+                    saveRole();
+                }
+                catch (Throwable th)
+                {
+                    logger.severe("Throw in thread loop.");
+                    Print.printStackTrace(th, logger);
+                }
             }
         }
-    }, "IoT.BackupThread");
+    }, "Getix.BackupThread");
 
     public FileStorageBase()
     {
@@ -54,7 +64,7 @@ public class FileStorageBase
     public void initialize(ReadWriteLock lock, String[] args)
     {
         this.lock = lock;
-        this.storeRole = new DataRole(lock, new StoreDataRole());
+        this.storeRole = new DataRole(lock, storeDataRole);
         this.save_folder = args[0];
         this.BACKUP_TIMEOUT = Long.parseLong(args[1]);
 
@@ -78,61 +88,64 @@ public class FileStorageBase
 
     private void saveStore()
     {
-        String tmpFilePath = save_folder + "/" + BACKUP_NAME_STORE + System.currentTimeMillis() + "." + BACKUP_EXT;
-
-        lock.readLock().lock();
         try
         {
-            boolean delete = false;
-            ObjectOutputStream outputStream = null;
+            logger.info("Saving store ...");
+            String tmpFilePath = save_folder + "/" + BACKUP_NAME_STORE + System.currentTimeMillis() + "." + BACKUP_EXT;
+
+            lock.readLock().lock();
             try
             {
-                outputStream = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(tmpFilePath)));
-                outputStream.writeObject(storeData);
-            }
-            catch (FileNotFoundException ex)
-            {
-                Print.printStackTrace(ex, logger);
-                delete = true;
-            }
-            catch (IOException ex)
-            {
-                Print.printStackTrace(ex, logger);
-                delete = true;
-            }
-            finally
-            {
+                boolean delete = false;
+                ObjectOutputStream outputStream = null;
                 try
                 {
-                    if (outputStream != null)
-                    {
-                        outputStream.flush();
-                        outputStream.close();
-                    }
+                    outputStream = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(tmpFilePath),FILE_BUFFER_SIZE));
+                    outputStream.writeObject(storeData);
+                }
+                catch (FileNotFoundException ex)
+                {
+                    Print.printStackTrace(ex, logger);
+                    delete = true;
                 }
                 catch (IOException ex)
                 {
                     Print.printStackTrace(ex, logger);
                     delete = true;
                 }
-
-                if (delete)
+                finally
                 {
-                    if (!delete(new File(tmpFilePath)))
+                    try
                     {
-                        logger.severe("Cannot delete file: " + new File(tmpFilePath).getAbsolutePath());
+                        if (outputStream != null)
+                        {
+                            outputStream.flush();
+                            outputStream.close();
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        Print.printStackTrace(ex, logger);
+                        delete = true;
+                    }
+
+                    if (delete)
+                    {
+                        if (!delete(new File(tmpFilePath)))
+                        {
+                            logger.severe("Cannot delete file: " + new File(tmpFilePath).getAbsolutePath());
+                        }
                     }
                 }
             }
-        }
-        finally
-        {
-            lock.readLock().unlock();
-        }
-
-        if (new File(tmpFilePath).exists())
-        {
-            // we may want to check for if OK
+            finally
+            {
+                lock.readLock().unlock();
+            }
+            logger.info("Writing store done. Now we will rename ...");
+            if (new File(tmpFilePath).exists())
+            {
+                // we may want to check for if OK
 //            if (Store.load(tmpFilePath) == null)
 //            {
 //                logger.severe("Saved file is corrupt: " + tmpFilePath);
@@ -145,95 +158,104 @@ public class FileStorageBase
 //                return;
 //            }
 
-            if (new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).exists())
-            {
-                if (!delete(new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT)))
+                if (new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).exists())
                 {
-                    logger.severe("Cannot delete file: " + new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).getAbsolutePath());
-                    return;
-                }
-            }
-            // start rename procedure
-            for (int c = BACKUP_CNT - 2; c >= 0; c--)
-            {
-                if (new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT).exists())
-                {
-                    if (!rename(new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT), new File(save_folder + "/" + BACKUP_NAME_STORE + (c + 1) + "." + BACKUP_EXT)))
+                    if (!delete(new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT)))
                     {
-                        logger.severe("Cannot rename [" + new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_STORE + (c + 1) + "." + BACKUP_EXT).getAbsolutePath() + "]");
+                        logger.severe("Cannot delete file: " + new File(save_folder + "/" + BACKUP_NAME_STORE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).getAbsolutePath());
                         return;
                     }
                 }
+                // start rename procedure
+                for (int c = BACKUP_CNT - 2; c >= 0; c--)
+                {
+                    if (new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT).exists())
+                    {
+                        if (!rename(new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT), new File(save_folder + "/" + BACKUP_NAME_STORE + (c + 1) + "." + BACKUP_EXT)))
+                        {
+                            logger.severe("Cannot rename [" + new File(save_folder + "/" + BACKUP_NAME_STORE + c + "." + BACKUP_EXT).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_STORE + (c + 1) + "." + BACKUP_EXT).getAbsolutePath() + "]");
+                            return;
+                        }
+                    }
+                }
+
+                if (!rename(new File(tmpFilePath), new File(save_folder + "/" + BACKUP_NAME_STORE + "0." + BACKUP_EXT)))
+                {
+                    logger.severe("Cannot rename [" + new File(tmpFilePath).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_STORE + "0." + BACKUP_EXT).getAbsolutePath() + "]");
+                    return;
+                }
+
+                logger.info("Backup store created.");
+
             }
-
-            if (!rename(new File(tmpFilePath), new File(save_folder + "/" + BACKUP_NAME_STORE + "0." + BACKUP_EXT)))
-            {
-                logger.severe("Cannot rename [" + new File(tmpFilePath).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_STORE + "0." + BACKUP_EXT).getAbsolutePath() + "]");
-                return;
-            }
-
-            logger.info("Backup store created.");
-
+        }
+        catch (Throwable th)
+        {
+            logger.severe("Throw in save store.");
+            Print.printStackTrace(th, logger);
         }
     }
 
     private void saveRole()
     {
-        String tmpFilePath = save_folder + "/" + BACKUP_NAME_ROLE + System.currentTimeMillis() + "." + BACKUP_EXT;
-
-        lock.readLock().lock();
         try
         {
-            boolean delete = false;
-            ObjectOutputStream outputStream = null;
+            logger.info("Saving role ...");
+            String tmpFilePath = save_folder + "/" + BACKUP_NAME_ROLE + System.currentTimeMillis() + "." + BACKUP_EXT;
+
+            lock.readLock().lock();
             try
             {
-                outputStream = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(tmpFilePath)));
-                outputStream.writeObject(storeRole.getStore());
-            }
-            catch (FileNotFoundException ex)
-            {
-                Print.printStackTrace(ex, logger);
-                delete = true;
-            }
-            catch (IOException ex)
-            {
-                Print.printStackTrace(ex, logger);
-                delete = true;
-            }
-            finally
-            {
+                boolean delete = false;
+                ObjectOutputStream outputStream = null;
                 try
                 {
-                    if (outputStream != null)
-                    {
-                        outputStream.flush();
-                        outputStream.close();
-                    }
+                    outputStream = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(tmpFilePath), FILE_BUFFER_SIZE));
+                    outputStream.writeObject(storeDataRole);
+                }
+                catch (FileNotFoundException ex)
+                {
+                    Print.printStackTrace(ex, logger);
+                    delete = true;
                 }
                 catch (IOException ex)
                 {
                     Print.printStackTrace(ex, logger);
                     delete = true;
                 }
-
-                if (delete)
+                finally
                 {
-                    if (!delete(new File(tmpFilePath)))
+                    try
                     {
-                        logger.severe("Cannot delete file: " + new File(tmpFilePath).getAbsolutePath());
+                        if (outputStream != null)
+                        {
+                            outputStream.flush();
+                            outputStream.close();
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        Print.printStackTrace(ex, logger);
+                        delete = true;
+                    }
+
+                    if (delete)
+                    {
+                        if (!delete(new File(tmpFilePath)))
+                        {
+                            logger.severe("Cannot delete file: " + new File(tmpFilePath).getAbsolutePath());
+                        }
                     }
                 }
             }
-        }
-        finally
-        {
-            lock.readLock().unlock();
-        }
-
-        if (new File(tmpFilePath).exists())
-        {
-            // we may want to check for if OK
+            finally
+            {
+                lock.readLock().unlock();
+            }
+            logger.info("Writing role done. Now we will rename ...");
+            if (new File(tmpFilePath).exists())
+            {
+                // we may want to check for if OK
 //            if (Store.load(tmpFilePath) == null)
 //            {
 //                logger.severe("Saved file is corrupt: " + tmpFilePath);
@@ -246,35 +268,41 @@ public class FileStorageBase
 //                return;
 //            }
 
-            if (new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).exists())
-            {
-                if (!delete(new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT)))
+                if (new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).exists())
                 {
-                    logger.severe("Cannot delete file: " + new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).getAbsolutePath());
-                    return;
-                }
-            }
-            // start rename procedure
-            for (int c = BACKUP_CNT - 2; c >= 0; c--)
-            {
-                if (new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT).exists())
-                {
-                    if (!rename(new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT), new File(save_folder + "/" + BACKUP_NAME_ROLE + (c + 1) + "." + BACKUP_EXT)))
+                    if (!delete(new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT)))
                     {
-                        logger.severe("Cannot rename [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + (c + 1) + "." + BACKUP_EXT).getAbsolutePath() + "]");
+                        logger.severe("Cannot delete file: " + new File(save_folder + "/" + BACKUP_NAME_ROLE + (BACKUP_CNT - 1) + "." + BACKUP_EXT).getAbsolutePath());
                         return;
                     }
                 }
+                // start rename procedure
+                for (int c = BACKUP_CNT - 2; c >= 0; c--)
+                {
+                    if (new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT).exists())
+                    {
+                        if (!rename(new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT), new File(save_folder + "/" + BACKUP_NAME_ROLE + (c + 1) + "." + BACKUP_EXT)))
+                        {
+                            logger.severe("Cannot rename [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + c + "." + BACKUP_EXT).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + (c + 1) + "." + BACKUP_EXT).getAbsolutePath() + "]");
+                            return;
+                        }
+                    }
+                }
+
+                if (!rename(new File(tmpFilePath), new File(save_folder + "/" + BACKUP_NAME_ROLE + "0." + BACKUP_EXT)))
+                {
+                    logger.severe("Cannot rename [" + new File(tmpFilePath).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + "0." + BACKUP_EXT).getAbsolutePath() + "]");
+                    return;
+                }
+
+                logger.info("Backup role created.");
+
             }
-
-            if (!rename(new File(tmpFilePath), new File(save_folder + "/" + BACKUP_NAME_ROLE + "0." + BACKUP_EXT)))
-            {
-                logger.severe("Cannot rename [" + new File(tmpFilePath).getAbsolutePath() + "]  TO [" + new File(save_folder + "/" + BACKUP_NAME_ROLE + "0." + BACKUP_EXT).getAbsolutePath() + "]");
-                return;
-            }
-
-            logger.info("Backup role created.");
-
+        }
+        catch (Throwable th)
+        {
+            logger.severe("Throw in save role.");
+            Print.printStackTrace(th, logger);
         }
     }
 
@@ -485,3 +513,4 @@ public class FileStorageBase
         return storeRole;
     }
 }
+
