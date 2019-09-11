@@ -34,6 +34,7 @@ public class DataRole
         this.lock = lock;
     }
 
+
     public final UUID getAccount(long nodeId)
     {
         lock.readLock().lock();
@@ -51,11 +52,6 @@ public class DataRole
         {
             lock.readLock().unlock();
         }
-    }
-
-    public final StoreDataRole getStore()
-    {
-        return store;
     }
 
     public final byte[] getFacilitatorNetworkKey(UUID id)
@@ -96,12 +92,39 @@ public class DataRole
         }
     }
 
-    public boolean isNodeValid(long nodeId)
+    public final boolean isNodeValid(long nodeId)
     {
         lock.readLock().lock();
         try
         {
             return store.allNodes.containsKey(nodeId);
+        }
+        finally
+        {
+            lock.readLock().unlock();
+        }
+    }
+
+    public final boolean matchGatewayNode(long gatewayId,
+                                          long nodeId)
+    {
+        lock.readLock().lock();
+        try
+        {
+            GatewayData g = store.allGateways.get(gatewayId);
+            if (g == null)
+            {
+                return false;
+            }
+
+            NodeData n = store.allNodes.get(nodeId);
+            if (n == null)
+            {
+                return false;
+            }
+
+
+            return g.getAccountId().equals(n.getAccountId());
         }
         finally
         {
@@ -150,34 +173,6 @@ public class DataRole
             lock.readLock().unlock();
         }
     }
-
-    public boolean matchGatewayNode(long gatewayId,
-                                    long nodeId)
-    {
-        lock.readLock().lock();
-        try
-        {
-            GatewayData g = store.allGateways.get(gatewayId);
-            if (g == null)
-            {
-                return false;
-            }
-
-            NodeData n = store.allNodes.get(nodeId);
-            if (n == null)
-            {
-                return false;
-            }
-
-
-            return g.getAccountId().equals(n.getAccountId());
-        }
-        finally
-        {
-            lock.readLock().unlock();
-        }
-    }
-
 
     public final byte[] getGatewayNetworkKey(long id)
     {
@@ -685,6 +680,7 @@ public class DataRole
     public final String getGateway(UUID accountId)
     {
         HashSet<Long> copy;
+        StringBuilder sb = new StringBuilder();
         lock.readLock().lock();
         try
         {
@@ -695,26 +691,19 @@ public class DataRole
             }
 
             copy = (HashSet<Long>) a.getGateways().clone();
+
+            for (Long gateway : copy)
+            {
+                GatewayData g = null;
+
+                g = store.allGateways.get(gateway);
+
+                sb.append(g.getId()).append(",\"").append(g.getName().replaceAll("\"", "\\\"")).append("\";");
+            }
         }
         finally
         {
             lock.readLock().unlock();
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (Long gateway : copy)
-        {
-            GatewayData g = null;
-            lock.readLock().lock();
-            try
-            {
-                g = store.allGateways.get(gateway);
-            }
-            finally
-            {
-                lock.readLock().unlock();
-            }
-            sb.append(g.getId()).append(",\"").append(g.getName().replaceAll("\"", "\\\"")).append("\";");
         }
         if (sb.length() > 0)
         {
@@ -761,6 +750,7 @@ public class DataRole
     public final String getNode(UUID accountId)
     {
         HashSet<Long> copy;
+        StringBuilder sb = new StringBuilder();
         lock.readLock().lock();
         try
         {
@@ -771,28 +761,22 @@ public class DataRole
             }
 
             copy = (HashSet<Long>) a.getNodes().clone();
+
+            for (Long node : copy)
+            {
+                NodeData n = null;
+
+                n = store.allNodes.get(node);
+
+                sb.append(n.getId()).append(",\"").append(n.getName().replaceAll("\"", "\\\"")).append("\";");
+            }
+
         }
         finally
         {
             lock.readLock().unlock();
         }
 
-        StringBuilder sb = new StringBuilder();
-        for (Long node : copy)
-        {
-            NodeData n = null;
-
-            lock.readLock().lock();
-            try
-            {
-                n = store.allNodes.get(node);
-            }
-            finally
-            {
-                lock.readLock().unlock();
-            }
-            sb.append(n.getId()).append(",\"").append(n.getName().replaceAll("\"", "\\\"")).append("\";");
-        }
         if (sb.length() > 0)
         {
             sb.setLength(sb.length() - 1);
@@ -800,3 +784,4 @@ public class DataRole
         return sb.toString();
     }
 }
+
