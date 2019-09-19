@@ -47,9 +47,11 @@ class Server implements AcceptorListener, PacketChannelListener
 
     private final static int MAX_CONNECTIONS_PER_TIMEOUT = 5;
     private final static long MAX_TIME_WITHOUT_PACKET = 20 * 60 * 1000; // 20 min
+	private final static long CONNECTION_ABUSE_BACK_OFF_TIMEOUT = 5 * 60 * 1000; // 5 min
 
     private final DoSPreventer preventer = new DoSPreventer(MAX_CONNECTIONS_PER_TIMEOUT, MAX_TIME_WITHOUT_PACKET);
-
+	private final ConnectPreventer connPreventer = new ConnectPreventer(CONNECTION_ABUSE_BACK_OFF_TIMEOUT);
+	
     private final int THREAD_POOL_SIZE = 16;
     private final Thread[] pool = new Thread[THREAD_POOL_SIZE - 1];
 
@@ -218,6 +220,11 @@ class Server implements AcceptorListener, PacketChannelListener
                 // not allowed - kill it
                 pc.close();
             }
+			else if (!connPreventer.checkConnection(pc))
+            {
+                // not allowed - kill it
+                pc.close();
+            }
         }
         catch (Exception e)
         {
@@ -263,6 +270,8 @@ class Server implements AcceptorListener, PacketChannelListener
                     {
                         if (!processor.process(pckt, pc))
                         {
+                            connPreventer.addConnection(pc);
+                            logger.warning("Connection [" + pc.getRemoteIPAddress() + "] stopped temporary. Reason : Cannot process packet. ");
                             // in case protocol mismatch - close connection
                             pc.close();
                         }
