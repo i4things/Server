@@ -108,6 +108,12 @@ class GatewayBuffer
     {
         synchronized (sync)
         {
+            PacketChannel prev_pc =  gatewayCh.get(new Long(gateway_id));
+            if (prev_pc != null)
+            {
+                removeGatewayChannel(prev_pc); 
+            }
+            
             gatewayCh.put(new Long(gateway_id), pc);
             channelGw.put(pc, new Long(gateway_id));
         }
